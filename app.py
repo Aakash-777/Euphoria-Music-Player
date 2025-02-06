@@ -9,28 +9,18 @@ app = Flask(__name__)
 load_dotenv()
 API_KEY = os.getenv('YOUTUBE')
 
-# Add this after your imports
 def setup_cookies():
     cookies_env = os.getenv('YOUTUBE_COOKIES')
     if cookies_env:
         try:
             # Write cookies from environment variable to file
-            with open('youtube_cookies.json', 'w') as f:
+            with open('youtube_cookies.txt', 'w', encoding='utf-8') as f:
                 f.write(cookies_env)
             print("Cookies setup successful")
         except Exception as e:
             print(f"Error setting up cookies: {e}")
 
-# Add this right after creating the Flask app
 setup_cookies()
-
-# Load cookies from file
-def load_cookies():
-    try:
-        with open('youtube_cookies.json', 'r') as f:
-            return json.load(f)
-    except:
-        return None
 
 def search_youtube(query, max_results=10):
     youtube = build('youtube', 'v3', developerKey=API_KEY)
@@ -53,7 +43,7 @@ def search_youtube(query, max_results=10):
 
 def get_audio_url(video_id):
     try:
-        cookies = load_cookies()
+        cookie_file = 'youtube_cookies.txt'
         
         ydl_opts = {
             'format': 'bestaudio[ext=m4a]/bestaudio/best',
@@ -64,8 +54,8 @@ def get_audio_url(video_id):
         }
         
         # Add cookies if available
-        if cookies:
-            ydl_opts['cookiefile'] = 'youtube_cookies.json'
+        if os.path.exists(cookie_file):
+            ydl_opts['cookiefile'] = cookie_file
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(f'https://www.youtube.com/watch?v={video_id}', download=False)
@@ -118,4 +108,4 @@ def get_audio():
     return jsonify({'error': 'Could not get audio URL'}), 400
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run()

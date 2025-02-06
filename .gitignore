@@ -1,5 +1,5 @@
 nouse/
 venv/
 .env
-youtube_cookies.json
+youtube_cookies.txt
 cmds.txt
