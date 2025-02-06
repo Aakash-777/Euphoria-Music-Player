@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Euphoria Music Player</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&icon_names=graphic_eq" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lobster&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <h1><span class="material-symbols-outlined" id="logo">
+            graphic_eq
+            </span>Euphoria</h1>
+        
+        <div class="search-container">
+            <input type="text" id="searchInput" placeholder="Search for a song...">
+            <button id="searchButton">Search</button>
+        </div>
+
+        <div class="results-container" id="searchResults">
+            <!-- Search results will be populated here -->
+        </div>
+    </div>
+
+    <div class="player-container">
+        <div class="now-playing">
+            <h2>Now Playing</h2>
+            <p id="currentSong">No song selected</p>
+        </div>
+        <audio id="audioPlayer" controls></audio>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>
