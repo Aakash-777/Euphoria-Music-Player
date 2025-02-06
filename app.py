@@ -1,19 +1,24 @@
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify, request, Response, stream_with_context
 from googleapiclient.discovery import build
 from dotenv import load_dotenv
 import os
 import yt_dlp
+import requests
 import json
+from datetime import datetime
+import time
 
 app = Flask(__name__)
 load_dotenv()
 API_KEY = os.getenv('YOUTUBE')
 
+# Cache for storing video information
+video_cache = {}
+
 def setup_cookies():
     cookies_env = os.getenv('YOUTUBE_COOKIES')
     if cookies_env:
         try:
-            # Write cookies from environment variable to file
             with open('youtube_cookies.txt', 'w', encoding='utf-8') as f:
                 f.write(cookies_env)
             print("Cookies setup successful")
@@ -41,7 +46,8 @@ def search_youtube(query, max_results=10):
         })
     return results
 
-def get_audio_url(video_id):
+def get_video_info(video_id):
+    """Get video information using yt-dlp"""
     try:
         cookie_file = 'youtube_cookies.txt'
         
@@ -53,29 +59,43 @@ def get_audio_url(video_id):
             'source_address': '0.0.0.0',
         }
         
-        # Add cookies if available
         if os.path.exists(cookie_file):
             ydl_opts['cookiefile'] = cookie_file
-        
+
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(f'https://www.youtube.com/watch?v={video_id}', download=False)
-            formats = info.get('formats', [])
             
             # Find the best audio format
+            formats = info.get('formats', [])
             for f in formats:
                 if f.get('acodec') != 'none' and f.get('vcodec') == 'none':
-                    return {'url': f['url'], 'error': None}
+                    return {
+                        'url': f['url'],
+                        'title': info.get('title', ''),
+                        'content_type': f.get('ext', 'mp4'),
+                        'error': None
+                    }
             
             # Fallback to any format with audio
             for f in formats:
                 if f.get('acodec') != 'none':
-                    return {'url': f['url'], 'error': None}
+                    return {
+                        'url': f['url'],
+                        'title': info.get('title', ''),
+                        'content_type': f.get('ext', 'mp4'),
+                        'error': None
+                    }
                     
-            return {'url': info['url'], 'error': None}
+            return {
+                'url': info['url'],
+                'title': info.get('title', ''),
+                'content_type': 'mp4',
+                'error': None
+            }
             
     except Exception as e:
-        print(f"Error in get_audio_url: {str(e)}")
-        return {'url': None, 'error': str(e)}
+        print(f"Error getting video info: {str(e)}")
+        return {'error': str(e)}
 
 @app.route('/')
 def index():
@@ -93,19 +113,50 @@ def search():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/stream/<video_id>')
+def stream_audio(video_id):
+    """Stream audio data from YouTube"""
+    try:
+        # Check cache first
+        video_info = video_cache.get(video_id)
+        if not video_info or (datetime.now() - video_info['timestamp']).seconds > 3600:
+            # Get fresh video info if not cached or expired
+            video_info = get_video_info(video_id)
+            if video_info.get('error'):
+                return jsonify({'error': video_info['error']}), 400
+            
+            video_info['timestamp'] = datetime.now()
+            video_cache[video_id] = video_info
+
+        def generate():
+            # Stream the content in chunks
+            with requests.get(video_info['url'], stream=True) as r:
+                r.raise_for_status()
+                for chunk in r.iter_content(chunk_size=8192):
+                    if chunk:
+                        yield chunk
+
+        return Response(
+            stream_with_context(generate()),
+            content_type=f'audio/{video_info["content_type"]}'
+        )
+
+    except Exception as e:
+        print(f"Streaming error: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/get_audio', methods=['POST'])
 def get_audio():
+    """Get streaming endpoint URL for a video"""
     video_id = request.json.get('videoId')
     if not video_id:
         return jsonify({'error': 'No video ID provided'}), 400
     
-    result = get_audio_url(video_id)
-    if result['error']:
-        return jsonify({'error': result['error']}), 400
-    if result['url']:
-        return jsonify({'url': result['url']})
-    
-    return jsonify({'error': 'Could not get audio URL'}), 400
+    # Return the streaming endpoint URL
+    return jsonify({
+        'url': f'/stream/{video_id}',
+        'error': None
+    })
 
 if __name__ == '__main__':
     app.run()

@@ -16,6 +16,8 @@ document.addEventListener('DOMContentLoaded', function() {
         const query = searchInput.value.trim();
         if (!query) return;
 
+        searchResults.innerHTML = '<div class="loading">Searching...</div>';
+
         fetch('/search', {
             method: 'POST',
             headers: {
@@ -31,6 +33,11 @@ document.addEventListener('DOMContentLoaded', function() {
     function displayResults(results) {
         searchResults.innerHTML = '';
         
+        if (results.length === 0) {
+            searchResults.innerHTML = '<div class="no-results">No results found</div>';
+            return;
+        }
+
         results.forEach(result => {
             const songItem = document.createElement('div');
             songItem.className = 'song-item';
@@ -46,34 +53,61 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    function playSong(song) {
-        fetch('/get_audio', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ videoId: song.videoId })
-        })
-        .then(response => response.json())
-        .then(data => {
+    async function playSong(song) {
+        currentSong.textContent = 'Loading...';
+        
+        try {
+            const response = await fetch('/get_audio', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ videoId: song.videoId })
+            });
+            
+            const data = await response.json();
+            
             if (data.error) {
                 throw new Error(data.error);
             }
+            
+            // Set the audio source to our streaming endpoint
             audioPlayer.src = data.url;
-            audioPlayer.play();
-            currentSong.textContent = song.title;
-        })
-        .catch(handleError);
+            audioPlayer.load();
+            
+            const playPromise = audioPlayer.play();
+            if (playPromise !== undefined) {
+                playPromise
+                    .then(() => {
+                        currentSong.textContent = song.title;
+                    })
+                    .catch(e => {
+                        console.error('Playback failed:', e);
+                        handleError(e);
+                    });
+            }
+        } catch (error) {
+            handleError(error);
+        }
     }
 
     function handleError(error) {
+        console.error('Error:', error);
+        
         const errorMessage = document.createElement('div');
         errorMessage.className = 'error-message';
         errorMessage.textContent = `Error: ${error.message}`;
         searchResults.insertAdjacentElement('beforebegin', errorMessage);
         
+        currentSong.textContent = 'Error playing song';
+        
         setTimeout(() => {
             errorMessage.remove();
         }, 5000);
     }
+
+    audioPlayer.addEventListener('error', (e) => {
+        console.error('Audio player error:', e);
+        handleError(new Error('Failed to play audio. Please try again.'));
+    });
 });
